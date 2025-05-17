@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/contexts/AppContext";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
-import { Google } from "lucide-react";
+import { Mail } from "lucide-react";
 
 const Register = () => {
   const [name, setName] = useState("");
@@ -83,7 +83,7 @@ const Register = () => {
           onClick={handleGoogleSignIn}
           disabled={isLoading}
         >
-          <Google className="h-4 w-4" />
+          <Mail className="h-4 w-4" />
           Continue with Google
         </Button>
         
