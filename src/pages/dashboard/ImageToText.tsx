@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,8 +27,32 @@ const ImageToText = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [language, setLanguage] = useState("eng");
+  const [tesseractLoaded, setTesseractLoaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Check if Tesseract is loaded
+  useEffect(() => {
+    const checkTesseract = () => {
+      if (window.Tesseract) {
+        setTesseractLoaded(true);
+        return true;
+      }
+      return false;
+    };
+
+    // Initial check
+    if (checkTesseract()) return;
+
+    // Set interval to check until loaded
+    const intervalId = setInterval(() => {
+      if (checkTesseract()) {
+        clearInterval(intervalId);
+      }
+    }, 500);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -77,20 +101,32 @@ const ImageToText = () => {
   };
 
   const processImage = async () => {
-    if (!image) return;
+    if (!image || !tesseractLoaded) {
+      if (!tesseractLoaded) {
+        toast({
+          variant: "destructive",
+          title: "Tesseract not loaded",
+          description: "Please wait for Tesseract to load and try again.",
+        });
+      }
+      return;
+    }
     
     setIsProcessing(true);
     setProgress(0);
     
     try {
+      console.log("Starting OCR processing...");
       const result = await window.Tesseract.recognize(image, {
         logger: (info) => {
+          console.log("OCR progress:", info);
           if (info.status === "recognizing text") {
             setProgress(info.progress ? Math.round(info.progress * 100) : 0);
           }
         }
       });
       
+      console.log("OCR complete! Result:", result);
       setExtractedText(result.data.text);
       toast({
         title: "Text extraction complete",
@@ -164,6 +200,13 @@ const ImageToText = () => {
               <p className="mt-1 text-xs text-muted-foreground">Select the main language in your image</p>
             </div>
             
+            {/* Tesseract Loading Status */}
+            {!tesseractLoaded && (
+              <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                Loading Tesseract.js... Please wait before processing images.
+              </div>
+            )}
+            
             {/* Drag & Drop Area */}
             <div 
               className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-secondary/50 transition-colors"
@@ -205,7 +248,7 @@ const ImageToText = () => {
             <Button 
               className="w-full" 
               onClick={processImage} 
-              disabled={!image || isProcessing}
+              disabled={!image || isProcessing || !tesseractLoaded}
             >
               {isProcessing ? "Processing..." : "Extract Text"}
             </Button>

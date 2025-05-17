@@ -15,6 +15,21 @@ const Dashboard = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  // Load Tesseract.js script
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.1/dist/tesseract.min.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      // Clean up the script when component unmounts
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
+
   // Don't render anything if not authenticated
   if (!isAuthenticated) return null;
 
