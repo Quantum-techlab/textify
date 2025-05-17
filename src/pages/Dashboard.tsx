@@ -15,8 +15,9 @@ const Dashboard = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Load Tesseract.js script
+  // Load Tesseract.js script and worker
   useEffect(() => {
+    // Load main Tesseract script
     const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@2.1.1/dist/tesseract.min.js";
     script.async = true;

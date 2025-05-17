@@ -28,6 +28,7 @@ const ImageToText = () => {
   const [progress, setProgress] = useState(0);
   const [language, setLanguage] = useState("eng");
   const [tesseractLoaded, setTesseractLoaded] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -35,6 +36,7 @@ const ImageToText = () => {
   useEffect(() => {
     const checkTesseract = () => {
       if (window.Tesseract) {
+        console.log("Tesseract.js loaded successfully!");
         setTesseractLoaded(true);
         return true;
       }
@@ -66,6 +68,7 @@ const ImageToText = () => {
       // Reset state
       setExtractedText("");
       setProgress(0);
+      setProcessingStatus("");
     }
   };
 
@@ -86,6 +89,7 @@ const ImageToText = () => {
         // Reset state
         setExtractedText("");
         setProgress(0);
+        setProcessingStatus("");
       } else {
         toast({
           variant: "destructive",
@@ -114,12 +118,17 @@ const ImageToText = () => {
     
     setIsProcessing(true);
     setProgress(0);
+    setExtractedText("");
+    setProcessingStatus("Initializing...");
     
     try {
       console.log("Starting OCR processing...");
+      
       const result = await window.Tesseract.recognize(image, {
         logger: (info) => {
           console.log("OCR progress:", info);
+          setProcessingStatus(info.status);
+          
           if (info.status === "recognizing text") {
             setProgress(info.progress ? Math.round(info.progress * 100) : 0);
           }
@@ -127,11 +136,21 @@ const ImageToText = () => {
       });
       
       console.log("OCR complete! Result:", result);
-      setExtractedText(result.data.text);
-      toast({
-        title: "Text extraction complete",
-        description: "Your text has been successfully extracted from the image.",
-      });
+      
+      if (result && result.data && result.data.text) {
+        setExtractedText(result.data.text);
+        toast({
+          title: "Text extraction complete",
+          description: "Your text has been successfully extracted from the image.",
+        });
+      } else {
+        setExtractedText("No text was found in the image.");
+        toast({
+          variant: "destructive",
+          title: "Extraction warning",
+          description: "No text was found in the image or the text couldn't be recognized.",
+        });
+      }
     } catch (error) {
       console.error("Error processing image:", error);
       toast({
@@ -139,8 +158,10 @@ const ImageToText = () => {
         title: "Text extraction failed",
         description: "There was an error processing your image. Please try again.",
       });
+      setExtractedText(`Error: Failed to extract text. Please try a different image.`);
     } finally {
       setIsProcessing(false);
+      setProcessingStatus("Complete");
     }
   };
 
@@ -263,7 +284,7 @@ const ImageToText = () => {
           <CardContent>
             {isProcessing ? (
               <div className="space-y-4 py-8">
-                <p className="text-center text-muted-foreground">Processing image...</p>
+                <p className="text-center text-muted-foreground">Processing image: {processingStatus}</p>
                 <Progress value={progress} className="h-2" />
                 <p className="text-center text-sm">{progress}% complete</p>
               </div>
