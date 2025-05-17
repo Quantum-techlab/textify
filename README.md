@@ -1,25 +1,49 @@
-# Welcome to your Lovable project
+textify-alchemy-platform is a modern web application that allows users to extract text from both images and audio files with ease. Built using React, Vite, and Supabase, it features a sleek UI, secure authentication, and real-time data access across devices.
 
-## Project info
+🚀 Key Features
+📸 Upload images and extract readable text using Tesseract.js
 
-**URL**: https://lovable.dev/projects/51eb9a52-6b46-43ce-a091-230d3741e15c
+🔊 Upload audio files and generate transcriptions via speech-to-text
 
-## How can I edit this code?
+🔐 Secure login and sign-up with Google authentication (OAuth)
 
-There are several ways of editing your application.
+🧾 Save, edit, and manage your extracted text history
 
-**Use Lovable**
+🌐 Access your files from any device through your dashboard
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/51eb9a52-6b46-43ce-a091-230d3741e15c) and start prompting.
+🎨 Beautiful, animated landing page and responsive UI
 
-Changes made via Lovable will be committed automatically to this repo.
+📱 Mobile-first design, works seamlessly across devices
 
-**Use your preferred IDE**
+🧠 Smart features like language detection, formatting options, and dark mode
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+🛠️ Tech Stack
+Frontend: React + Vite + Tailwind CSS
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Auth & Backend: Supabase
 
+Image OCR: Tesseract.js
+
+Audio Transcription: Web Speech API / Whisper API
+
+Animations: Framer Motion / Lottie
+
+📦 Installation (Dev)
+bash
+Copy
+Edit
+git clone https://github.com/your-username/textsync.git
+cd textsync
+npm install
+npm run dev
+📌 Coming Soon
+Real-time transcription via microphone
+
+OCR via camera capture
+
+Cloud storage integration (Google Drive, Dropbox)
+
+Collaboration features for shared transcripts
 Follow these steps:
 
 ```sh
@@ -60,14 +84,8 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/51eb9a52-6b46-43ce-a091-230d3741e15c) and click on Share -> Publish.
 
-## Can I connect a custom domain to my Lovable project?
 
-Yes, you can!
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
