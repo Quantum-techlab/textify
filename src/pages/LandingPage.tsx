@@ -51,8 +51,8 @@ const LandingPage = () => {
             </Button>
             <Button 
               size="lg" 
-              variant="outline" 
-              className="border-white text-white hover:bg-white/10"
+              variant="secondary" 
+              className="bg-white/20 border-2 border-white text-white hover:bg-white/30"
               onClick={handleDemo}
             >
               Try Demo
