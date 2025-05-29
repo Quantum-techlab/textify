@@ -18,7 +18,6 @@ interface Tesseract {
   setLogging?: (level: boolean) => void;
 }
 
-// Define a window object that includes Tesseract
 declare global {
   interface Window {
     Tesseract?: Tesseract;
@@ -42,14 +41,8 @@ const ImageToText = () => {
   useEffect(() => {
     const checkTesseract = () => {
       if (window.Tesseract) {
-        console.log("Tesseract.js loaded successfully!");
+        console.log("Tesseract.js detected and ready!");
         setTesseractLoaded(true);
-        
-        // Enable detailed logging
-        if (window.Tesseract.setLogging) {
-          window.Tesseract.setLogging(true);
-        }
-        
         return true;
       }
       return false;
@@ -63,14 +56,47 @@ const ImageToText = () => {
       if (checkTesseract()) {
         clearInterval(intervalId);
       }
-    }, 500);
+    }, 100);
 
-    return () => clearInterval(intervalId);
+    // Timeout after 30 seconds
+    const timeoutId = setTimeout(() => {
+      clearInterval(intervalId);
+      if (!window.Tesseract) {
+        console.error("Tesseract.js failed to load within 30 seconds");
+        setErrorMessage("Failed to load text extraction library. Please refresh the page.");
+      }
+    }, 30000);
+
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
+      
+      // Validate file type
+      if (!selectedFile.type.startsWith('image/')) {
+        toast({
+          variant: "destructive",
+          title: "Invalid file type",
+          description: "Please select an image file (JPG, PNG, etc.)",
+        });
+        return;
+      }
+
+      // Validate file size (5MB limit)
+      if (selectedFile.size > 5 * 1024 * 1024) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: "Please select an image smaller than 5MB",
+        });
+        return;
+      }
+
       setImage(selectedFile);
       
       // Create an object URL for the image preview
@@ -132,7 +158,7 @@ const ImageToText = () => {
       toast({
         variant: "destructive",
         title: "Tesseract not loaded",
-        description: "Please wait for Tesseract to load and try again.",
+        description: "Please wait for the text extraction library to load and try again.",
       });
       return;
     }
@@ -140,105 +166,93 @@ const ImageToText = () => {
     setIsProcessing(true);
     setProgress(0);
     setExtractedText("");
-    setProcessingStatus("Initializing...");
+    setProcessingStatus("Initializing OCR...");
     setErrorMessage(null);
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
+      console.log("Image file:", image.name, "Size:", image.size);
       
-      // Convert the image to a data URL to ensure it's loaded in memory
-      const reader = new FileReader();
-      
-      reader.onload = async (event) => {
-        if (!event.target || typeof event.target.result !== 'string') {
-          throw new Error('Failed to load image');
-        }
-        
-        const imageDataUrl = event.target.result;
-        
-        try {
-          const result = await window.Tesseract!.recognize(imageDataUrl, {
-            lang: language,
-            logger: (info) => {
-              console.log("OCR progress:", info);
-              setProcessingStatus(info.status);
-              
-              if (info.status === "recognizing text") {
-                setProgress(info.progress ? Math.round(info.progress * 100) : 0);
-              }
-            }
-          });
+      const result = await window.Tesseract.recognize(image, {
+        lang: language,
+        logger: (info) => {
+          console.log("OCR Logger:", info);
           
-          console.log("OCR complete! Result:", result);
-          
-          if (result && result.data && result.data.text) {
-            const text = result.data.text.trim();
-            if (text) {
-              setExtractedText(text);
-              toast({
-                title: "Text extraction complete",
-                description: "Your text has been successfully extracted from the image.",
-              });
-            } else {
-              setExtractedText("No text was found in the image.");
-              toast({
-                variant: "warning",
-                title: "Extraction warning",
-                description: "No text was found in the image or the text couldn't be recognized.",
-              });
-            }
-          } else {
-            throw new Error("Invalid result structure");
+          // Update status based on the progress info
+          if (info.status) {
+            setProcessingStatus(info.status);
           }
-        } catch (error) {
-          handleExtractionError(error);
-        } finally {
-          setIsProcessing(false);
-          setProcessingStatus("Complete");
+          
+          // Update progress if available
+          if (typeof info.progress === 'number') {
+            const progressPercent = Math.round(info.progress * 100);
+            setProgress(progressPercent);
+            console.log(`Progress: ${progressPercent}%`);
+          }
         }
-      };
+      });
       
-      reader.onerror = (error) => {
-        handleExtractionError(error);
-        setIsProcessing(false);
-      };
+      console.log("OCR Result:", result);
       
-      reader.readAsDataURL(image);
-      
+      if (result && result.data && typeof result.data.text === 'string') {
+        const text = result.data.text.trim();
+        if (text) {
+          setExtractedText(text);
+          setProgress(100);
+          setProcessingStatus("Complete");
+          toast({
+            title: "Text extraction complete",
+            description: "Your text has been successfully extracted from the image.",
+          });
+        } else {
+          setExtractedText("No text was found in the image.");
+          setProgress(100);
+          setProcessingStatus("Complete - No text found");
+          toast({
+            title: "No text found",
+            description: "No readable text was detected in the image. Try with a clearer image.",
+          });
+        }
+      } else {
+        throw new Error("Invalid OCR result structure");
+      }
     } catch (error) {
-      handleExtractionError(error);
+      console.error("Error processing image:", error);
+      const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
+      setErrorMessage(`Failed to extract text: ${errorMsg}`);
+      setExtractedText("");
+      setProgress(0);
+      setProcessingStatus("Error");
+      toast({
+        variant: "destructive",
+        title: "Text extraction failed",
+        description: "There was an error processing your image. Please try again with a different image.",
+      });
+    } finally {
       setIsProcessing(false);
     }
   };
-  
-  const handleExtractionError = (error: any) => {
-    console.error("Error processing image:", error);
-    const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    setErrorMessage(`Failed to extract text: ${errorMsg}`);
-    setExtractedText(`Error: Failed to extract text. Please try a different image.`);
-    toast({
-      variant: "destructive",
-      title: "Text extraction failed",
-      description: "There was an error processing your image. Please try again.",
-    });
-  };
 
   const handleCopyText = () => {
-    navigator.clipboard.writeText(extractedText);
-    toast({
-      title: "Text copied",
-      description: "The extracted text has been copied to your clipboard.",
-    });
+    if (extractedText) {
+      navigator.clipboard.writeText(extractedText);
+      toast({
+        title: "Text copied",
+        description: "The extracted text has been copied to your clipboard.",
+      });
+    }
   };
 
   const handleDownloadText = () => {
-    const element = document.createElement("a");
-    const file = new Blob([extractedText], { type: "text/plain" });
-    element.href = URL.createObjectURL(file);
-    element.download = "extracted-text.txt";
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+    if (extractedText) {
+      const element = document.createElement("a");
+      const file = new Blob([extractedText], { type: "text/plain" });
+      element.href = URL.createObjectURL(file);
+      element.download = "extracted-text.txt";
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    }
   };
 
   const handleUploadClick = () => {
@@ -283,13 +297,19 @@ const ImageToText = () => {
             {!tesseractLoaded && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700 flex items-center space-x-2">
                 <Skeleton className="h-4 w-4 rounded-full bg-yellow-300" />
-                <span>Loading Tesseract.js... Please wait before processing images.</span>
+                <span>Loading text extraction library... Please wait.</span>
               </div>
             )}
             
             {tesseractLoaded && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-700">
-                Tesseract.js is ready! You can now process images.
+                ✓ Text extraction library loaded and ready!
+              </div>
+            )}
+            
+            {errorMessage && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {errorMessage}
               </div>
             )}
             
@@ -336,7 +356,7 @@ const ImageToText = () => {
               onClick={processImage} 
               disabled={!image || isProcessing || !tesseractLoaded}
             >
-              {isProcessing ? `Processing (${progress}%)...` : "Extract Text"}
+              {isProcessing ? `Processing... ${progress}%` : "Extract Text"}
             </Button>
           </CardFooter>
         </Card>
@@ -349,13 +369,11 @@ const ImageToText = () => {
           <CardContent>
             {isProcessing ? (
               <div className="space-y-4 py-8">
-                <p className="text-center text-muted-foreground">Processing image: {processingStatus}</p>
+                <p className="text-center text-muted-foreground">
+                  {processingStatus || "Processing image..."}
+                </p>
                 <Progress value={progress} className="h-2" />
                 <p className="text-center text-sm">{progress}% complete</p>
-              </div>
-            ) : errorMessage ? (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-red-700">{errorMessage}</p>
               </div>
             ) : (
               <Textarea
@@ -363,6 +381,7 @@ const ImageToText = () => {
                 onChange={(e) => setExtractedText(e.target.value)}
                 placeholder="Extracted text will appear here..."
                 className="min-h-[200px] font-mono"
+                readOnly={!extractedText}
               />
             )}
           </CardContent>
