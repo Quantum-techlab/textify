@@ -173,7 +173,14 @@ const ImageToText = () => {
       console.log(`Starting OCR processing with language: ${language}...`);
       console.log("Image file:", image.name, "Size:", image.size);
       
-      const result = await window.Tesseract.recognize(image, {
+      // Convert image to data URL for better compatibility
+      const imageDataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(image);
+      });
+      
+      const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
           console.log("OCR Logger:", info);
@@ -181,13 +188,14 @@ const ImageToText = () => {
           // Update status based on the progress info
           if (info.status) {
             setProcessingStatus(info.status);
+            console.log("Status updated to:", info.status);
           }
           
-          // Update progress if available
-          if (typeof info.progress === 'number') {
+          // Update progress if available - this is the key fix
+          if (typeof info.progress === 'number' && info.progress >= 0) {
             const progressPercent = Math.round(info.progress * 100);
             setProgress(progressPercent);
-            console.log(`Progress: ${progressPercent}%`);
+            console.log(`Progress updated to: ${progressPercent}%`);
           }
         }
       });
@@ -369,11 +377,16 @@ const ImageToText = () => {
           <CardContent>
             {isProcessing ? (
               <div className="space-y-4 py-8">
-                <p className="text-center text-muted-foreground">
+                <p className="text-center text-muted-foreground text-lg font-medium">
                   {processingStatus || "Processing image..."}
                 </p>
-                <Progress value={progress} className="h-2" />
-                <p className="text-center text-sm">{progress}% complete</p>
+                <div className="space-y-2">
+                  <Progress value={progress} className="h-3" />
+                  <p className="text-center text-lg font-semibold text-primary">{progress}% complete</p>
+                </div>
+                <div className="text-center text-sm text-muted-foreground">
+                  Please wait while we extract text from your image...
+                </div>
               </div>
             ) : (
               <Textarea
