@@ -166,8 +166,20 @@ const ImageToText = () => {
     setIsProcessing(true);
     setProgress(0);
     setExtractedText("");
-    setProcessingStatus("Initializing OCR...");
+    setProcessingStatus("Starting OCR...");
     setErrorMessage(null);
+    
+    // Simulate progress updates for better UX while initializing
+    let currentProgress = 0;
+    const progressInterval = setInterval(() => {
+      if (currentProgress < 10) {
+        currentProgress += 2;
+        setProgress(currentProgress);
+        console.log(`Simulated progress: ${currentProgress}%`);
+      } else {
+        clearInterval(progressInterval);
+      }
+    }, 200);
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
@@ -180,34 +192,77 @@ const ImageToText = () => {
         reader.readAsDataURL(image);
       });
       
+      setProcessingStatus("Initializing text recognition...");
+      
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
-          console.log("OCR Logger:", info);
+          console.log("OCR Logger info received:", info);
+          
+          // Clear the simulated progress interval once real progress starts
+          if (info.progress !== undefined && info.progress > 0) {
+            clearInterval(progressInterval);
+          }
           
           // Update status based on the progress info
           if (info.status) {
-            setProcessingStatus(info.status);
-            console.log("Status updated to:", info.status);
+            let statusText = info.status;
+            // Make status more user-friendly
+            switch (info.status) {
+              case 'recognizing text':
+                statusText = 'Analyzing text...';
+                break;
+              case 'loading tesseract core':
+                statusText = 'Loading OCR engine...';
+                break;
+              case 'initializing tesseract':
+                statusText = 'Initializing text recognition...';
+                break;
+              case 'loading language traineddata':
+                statusText = 'Loading language data...';
+                break;
+              case 'initializing api':
+                statusText = 'Setting up OCR...';
+                break;
+              default:
+                statusText = info.status;
+            }
+            
+            setProcessingStatus(statusText);
+            console.log("Status updated to:", statusText);
           }
           
-          // Update progress if available - this is the key fix
+          // Update progress - handle both 0-1 and 0-100 ranges
           if (typeof info.progress === 'number' && info.progress >= 0) {
-            const progressPercent = Math.round(info.progress * 100);
+            let progressPercent;
+            if (info.progress <= 1) {
+              // Progress is in 0-1 range, convert to percentage
+              progressPercent = Math.round(info.progress * 100);
+            } else {
+              // Progress is already in 0-100 range
+              progressPercent = Math.round(info.progress);
+            }
+            
+            // Ensure progress is between 10 and 100 (since we simulated 0-10)
+            progressPercent = Math.max(10, Math.min(100, progressPercent));
+            
             setProgress(progressPercent);
-            console.log(`Progress updated to: ${progressPercent}%`);
+            console.log(`Progress updated to: ${progressPercent}% (original: ${info.progress})`);
           }
         }
       });
       
-      console.log("OCR Result:", result);
+      // Clear any remaining intervals
+      clearInterval(progressInterval);
+      
+      console.log("OCR Result received:", result);
       
       if (result && result.data && typeof result.data.text === 'string') {
         const text = result.data.text.trim();
         if (text) {
           setExtractedText(text);
           setProgress(100);
-          setProcessingStatus("Complete");
+          setProcessingStatus("Text extraction complete!");
           toast({
             title: "Text extraction complete",
             description: "Your text has been successfully extracted from the image.",
@@ -225,12 +280,15 @@ const ImageToText = () => {
         throw new Error("Invalid OCR result structure");
       }
     } catch (error) {
+      // Clear any remaining intervals
+      clearInterval(progressInterval);
+      
       console.error("Error processing image:", error);
       const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
       setErrorMessage(`Failed to extract text: ${errorMsg}`);
       setExtractedText("");
       setProgress(0);
-      setProcessingStatus("Error");
+      setProcessingStatus("Error occurred");
       toast({
         variant: "destructive",
         title: "Text extraction failed",
