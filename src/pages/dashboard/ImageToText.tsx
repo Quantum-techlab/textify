@@ -170,7 +170,8 @@ const ImageToText = () => {
     setErrorMessage(null);
     
     let progressInterval: NodeJS.Timeout | null = null;
-    let hasRealProgress = false;
+    let fallbackTimeout: NodeJS.Timeout | null = null;
+    let hasStarted = false;
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
@@ -185,30 +186,59 @@ const ImageToText = () => {
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
+      setProgress(5);
       
-      // Start simulated progress only if no real progress is received
+      // Start a more aggressive fallback progress
       progressInterval = setInterval(() => {
-        if (!hasRealProgress) {
+        if (!hasStarted) {
           setProgress(prev => {
-            const newProgress = Math.min(prev + 1, 15);
-            console.log(`Simulated progress: ${newProgress}%`);
+            const newProgress = Math.min(prev + 3, 25);
+            console.log(`Initial progress: ${newProgress}%`);
             return newProgress;
           });
         }
-      }, 500);
+      }, 1000);
+      
+      // Fallback timeout to ensure completion even if Tesseract doesn't report progress
+      fallbackTimeout = setTimeout(() => {
+        console.log("Fallback timeout triggered - forcing progress to complete");
+        hasStarted = true;
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+        
+        // Simulate completion progress
+        let currentProgress = 25;
+        const completionInterval = setInterval(() => {
+          currentProgress += 15;
+          setProgress(currentProgress);
+          console.log(`Fallback progress: ${currentProgress}%`);
+          
+          if (currentProgress >= 85) {
+            clearInterval(completionInterval);
+            setProgress(95);
+            setProcessingStatus("Finalizing text extraction...");
+          }
+        }, 1000);
+      }, 5000);
       
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
           console.log("OCR Logger info received:", info);
+          hasStarted = true;
           
-          // Mark that we've received real progress
-          if (info.progress !== undefined && info.progress > 0) {
-            hasRealProgress = true;
-            if (progressInterval) {
-              clearInterval(progressInterval);
-              progressInterval = null;
-            }
+          // Clear initial progress interval once we get real updates
+          if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+          }
+          
+          // Clear fallback timeout since we're getting real updates
+          if (fallbackTimeout) {
+            clearTimeout(fallbackTimeout);
+            fallbackTimeout = null;
           }
           
           // Update status based on the progress info
@@ -247,8 +277,8 @@ const ImageToText = () => {
               progressPercent = Math.round(info.progress);
             }
             
-            // Ensure progress is meaningful
-            progressPercent = Math.max(progressPercent, 15);
+            // Ensure progress is meaningful and progresses
+            progressPercent = Math.max(progressPercent, 30);
             progressPercent = Math.min(progressPercent, 100);
             
             setProgress(progressPercent);
@@ -257,9 +287,12 @@ const ImageToText = () => {
         }
       });
       
-      // Clear any remaining intervals
+      // Clear any remaining intervals/timeouts
       if (progressInterval) {
         clearInterval(progressInterval);
+      }
+      if (fallbackTimeout) {
+        clearTimeout(fallbackTimeout);
       }
       
       console.log("OCR Result received:", result);
@@ -287,9 +320,12 @@ const ImageToText = () => {
         throw new Error("Invalid OCR result structure");
       }
     } catch (error) {
-      // Clear any remaining intervals
+      // Clear any remaining intervals/timeouts
       if (progressInterval) {
         clearInterval(progressInterval);
+      }
+      if (fallbackTimeout) {
+        clearTimeout(fallbackTimeout);
       }
       
       console.error("Error processing image:", error);
