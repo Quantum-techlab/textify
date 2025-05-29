@@ -169,17 +169,8 @@ const ImageToText = () => {
     setProcessingStatus("Starting OCR...");
     setErrorMessage(null);
     
-    // Simulate progress updates for better UX while initializing
-    let currentProgress = 0;
-    const progressInterval = setInterval(() => {
-      if (currentProgress < 10) {
-        currentProgress += 2;
-        setProgress(currentProgress);
-        console.log(`Simulated progress: ${currentProgress}%`);
-      } else {
-        clearInterval(progressInterval);
-      }
-    }, 200);
+    let progressInterval: NodeJS.Timeout | null = null;
+    let hasRealProgress = false;
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
@@ -192,22 +183,37 @@ const ImageToText = () => {
         reader.readAsDataURL(image);
       });
       
+      console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
+      
+      // Start simulated progress only if no real progress is received
+      progressInterval = setInterval(() => {
+        if (!hasRealProgress) {
+          setProgress(prev => {
+            const newProgress = Math.min(prev + 1, 15);
+            console.log(`Simulated progress: ${newProgress}%`);
+            return newProgress;
+          });
+        }
+      }, 500);
       
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
           console.log("OCR Logger info received:", info);
           
-          // Clear the simulated progress interval once real progress starts
+          // Mark that we've received real progress
           if (info.progress !== undefined && info.progress > 0) {
-            clearInterval(progressInterval);
+            hasRealProgress = true;
+            if (progressInterval) {
+              clearInterval(progressInterval);
+              progressInterval = null;
+            }
           }
           
           // Update status based on the progress info
           if (info.status) {
             let statusText = info.status;
-            // Make status more user-friendly
             switch (info.status) {
               case 'recognizing text':
                 statusText = 'Analyzing text...';
@@ -236,24 +242,25 @@ const ImageToText = () => {
           if (typeof info.progress === 'number' && info.progress >= 0) {
             let progressPercent;
             if (info.progress <= 1) {
-              // Progress is in 0-1 range, convert to percentage
               progressPercent = Math.round(info.progress * 100);
             } else {
-              // Progress is already in 0-100 range
               progressPercent = Math.round(info.progress);
             }
             
-            // Ensure progress is between 10 and 100 (since we simulated 0-10)
-            progressPercent = Math.max(10, Math.min(100, progressPercent));
+            // Ensure progress is meaningful
+            progressPercent = Math.max(progressPercent, 15);
+            progressPercent = Math.min(progressPercent, 100);
             
             setProgress(progressPercent);
-            console.log(`Progress updated to: ${progressPercent}% (original: ${info.progress})`);
+            console.log(`Real progress updated to: ${progressPercent}% (original: ${info.progress})`);
           }
         }
       });
       
       // Clear any remaining intervals
-      clearInterval(progressInterval);
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
       
       console.log("OCR Result received:", result);
       
@@ -281,7 +288,9 @@ const ImageToText = () => {
       }
     } catch (error) {
       // Clear any remaining intervals
-      clearInterval(progressInterval);
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
       
       console.error("Error processing image:", error);
       const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
