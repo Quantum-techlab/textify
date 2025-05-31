@@ -170,6 +170,7 @@ const ImageToText = () => {
     setErrorMessage(null);
     
     let progressInterval: NodeJS.Timeout | null = null;
+    let ocrCompleted = false;
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
@@ -184,91 +185,88 @@ const ImageToText = () => {
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
-      setProgress(5);
+      setProgress(10);
       
-      // Smooth progress simulation that guarantees completion
-      let currentProgress = 5;
-      let progressStage = 'initializing';
-      let isCompleted = false;
+      // Enhanced progress simulation that guarantees completion
+      let currentProgress = 10;
       
       progressInterval = setInterval(() => {
-        if (isCompleted) return;
-        
-        // Increment progress more gradually to avoid getting stuck
-        if (currentProgress < 90) {
-          currentProgress += Math.random() * 6 + 2; // Random increment between 2-8
-        } else if (currentProgress < 95) {
-          currentProgress += Math.random() * 2 + 0.5; // Slower increment between 0.5-2.5
+        if (ocrCompleted) {
+          // OCR is done, complete the progress
+          setProgress(100);
+          setProcessingStatus("Text extraction complete!");
+          if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+          }
+          return;
         }
         
-        // Cap at 95% until OCR completes
-        if (currentProgress > 95) {
-          currentProgress = 95;
-        }
-        
-        // Update status based on progress
-        if (currentProgress > 20 && progressStage === 'initializing') {
+        // Gradual progress increase with realistic stages
+        if (currentProgress < 30) {
+          currentProgress += Math.random() * 4 + 2; // 2-6% increments
           setProcessingStatus("Loading OCR engine...");
-          progressStage = 'loading';
-        } else if (currentProgress > 45 && progressStage === 'loading') {
-          setProcessingStatus("Analyzing image...");
-          progressStage = 'analyzing';
-        } else if (currentProgress > 75 && progressStage === 'analyzing') {
+        } else if (currentProgress < 60) {
+          currentProgress += Math.random() * 3 + 1; // 1-4% increments
+          setProcessingStatus("Analyzing image structure...");
+        } else if (currentProgress < 85) {
+          currentProgress += Math.random() * 2 + 1; // 1-3% increments
           setProcessingStatus("Extracting text...");
-          progressStage = 'extracting';
-        } else if (currentProgress >= 95 && progressStage === 'extracting') {
+        } else if (currentProgress < 95) {
+          currentProgress += Math.random() * 1 + 0.5; // 0.5-1.5% increments
           setProcessingStatus("Finalizing extraction...");
-          progressStage = 'finalizing';
+        } else {
+          // Cap at 95% until OCR completes
+          currentProgress = 95;
+          setProcessingStatus("Processing final text...");
         }
         
         setProgress(Math.floor(currentProgress));
-        console.log(`Progress: ${Math.floor(currentProgress)}% - Stage: ${progressStage}`);
-      }, 600);
+        console.log(`Progress: ${Math.floor(currentProgress)}%`);
+      }, 500);
       
+      // Start OCR processing
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
-          console.log("Tesseract logger:", info);
-          // Let our simulated progress handle the updates
+          console.log("Tesseract progress:", info);
+          // Let our custom progress handle the UI updates
         }
       });
       
-      // Mark as completed and clear interval
-      isCompleted = true;
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
+      console.log("OCR completed successfully:", result);
       
-      console.log("OCR Result received:", result);
+      // Mark OCR as completed - this will trigger the progress to reach 100%
+      ocrCompleted = true;
       
-      // Complete the progress to 100%
-      setProgress(100);
-      setProcessingStatus("Text extraction complete!");
-      
-      if (result && result.data && typeof result.data.text === 'string') {
-        const text = result.data.text.trim();
-        if (text) {
-          setExtractedText(text);
-          toast({
-            title: "Text extraction complete",
-            description: "Your text has been successfully extracted from the image.",
-          });
+      // Small delay to ensure progress completes visually
+      setTimeout(() => {
+        if (result && result.data && typeof result.data.text === 'string') {
+          const text = result.data.text.trim();
+          if (text) {
+            setExtractedText(text);
+            toast({
+              title: "Text extraction complete",
+              description: "Your text has been successfully extracted from the image.",
+            });
+          } else {
+            setExtractedText("No text was found in the image.");
+            setProcessingStatus("Complete - No text found");
+            toast({
+              title: "No text found",
+              description: "No readable text was detected in the image. Try with a clearer image.",
+            });
+          }
         } else {
-          setExtractedText("No text was found in the image.");
-          setProcessingStatus("Complete - No text found");
-          toast({
-            title: "No text found",
-            description: "No readable text was detected in the image. Try with a clearer image.",
-          });
+          throw new Error("Invalid OCR result structure");
         }
-      } else {
-        throw new Error("Invalid OCR result structure");
-      }
+      }, 1000); // 1 second delay to show 100% completion
+      
     } catch (error) {
       // Clear any remaining intervals
       if (progressInterval) {
         clearInterval(progressInterval);
+        progressInterval = null;
       }
       
       console.error("Error processing image:", error);
@@ -283,7 +281,10 @@ const ImageToText = () => {
         description: "There was an error processing your image. Please try again with a different image.",
       });
     } finally {
-      setIsProcessing(false);
+      // Clean up and reset processing state after a delay
+      setTimeout(() => {
+        setIsProcessing(false);
+      }, 1500);
     }
   };
 
