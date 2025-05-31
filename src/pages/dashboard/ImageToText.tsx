@@ -181,40 +181,38 @@ const ImageToText = () => {
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
-      setProgress(15);
+      setProgress(10);
       
-      // Simple progress steps that guarantee completion
-      const progressSteps = [
-        { progress: 15, status: "Initializing text recognition..." },
-        { progress: 35, status: "Loading OCR engine..." },
-        { progress: 55, status: "Analyzing image structure..." },
-        { progress: 75, status: "Extracting text..." },
-        { progress: 90, status: "Finalizing extraction..." }
-      ];
-      
-      let stepIndex = 0;
-      const progressInterval = setInterval(() => {
-        if (stepIndex < progressSteps.length) {
-          const step = progressSteps[stepIndex];
-          setProgress(step.progress);
-          setProcessingStatus(step.status);
-          console.log(`Progress: ${step.progress}% - ${step.status}`);
-          stepIndex++;
-        }
-      }, 800);
-      
-      // Start OCR processing
+      // Start OCR processing with real-time progress tracking
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
-          console.log("Tesseract logger:", info);
+          console.log("Tesseract progress:", info);
+          
+          if (info.status === 'recognizing text' && info.progress) {
+            // Map Tesseract's 0-1 progress to our 20-95% range
+            const mappedProgress = 20 + (info.progress * 75);
+            setProgress(Math.min(95, mappedProgress));
+            setProcessingStatus("Extracting text from image...");
+          } else if (info.status === 'loading tesseract core') {
+            setProgress(15);
+            setProcessingStatus("Loading OCR engine...");
+          } else if (info.status === 'initializing tesseract') {
+            setProgress(20);
+            setProcessingStatus("Initializing text recognition...");
+          } else if (info.status === 'loading language traineddata') {
+            setProgress(25);
+            setProcessingStatus("Loading language data...");
+          } else if (info.status === 'initializing api') {
+            setProgress(30);
+            setProcessingStatus("Setting up OCR API...");
+          }
         }
       });
       
       console.log("OCR completed successfully:", result);
       
-      // Clear the interval and set completion
-      clearInterval(progressInterval);
+      // Ensure we reach 100% completion
       setProgress(100);
       setProcessingStatus("Text extraction complete!");
       
@@ -251,10 +249,10 @@ const ImageToText = () => {
         description: "There was an error processing your image. Please try again with a different image.",
       });
     } finally {
-      // Reset processing state after a brief delay
+      // Reset processing state after a brief delay to show completion
       setTimeout(() => {
         setIsProcessing(false);
-      }, 1500);
+      }, 2000);
     }
   };
 
