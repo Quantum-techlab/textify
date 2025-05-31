@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -170,8 +169,7 @@ const ImageToText = () => {
     setErrorMessage(null);
     
     let progressInterval: NodeJS.Timeout | null = null;
-    let fallbackTimeout: NodeJS.Timeout | null = null;
-    let hasStarted = false;
+    let completionTimeout: NodeJS.Timeout | null = null;
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
@@ -188,111 +186,61 @@ const ImageToText = () => {
       setProcessingStatus("Initializing text recognition...");
       setProgress(5);
       
-      // Start a more aggressive fallback progress
-      progressInterval = setInterval(() => {
-        if (!hasStarted) {
-          setProgress(prev => {
-            const newProgress = Math.min(prev + 3, 25);
-            console.log(`Initial progress: ${newProgress}%`);
-            return newProgress;
-          });
-        }
-      }, 1000);
+      // Reliable progress simulation that ensures completion
+      let currentProgress = 5;
+      let progressStage = 'initializing';
       
-      // Fallback timeout to ensure completion even if Tesseract doesn't report progress
-      fallbackTimeout = setTimeout(() => {
-        console.log("Fallback timeout triggered - forcing progress to complete");
-        hasStarted = true;
+      progressInterval = setInterval(() => {
+        currentProgress += Math.random() * 8 + 2; // Random increment between 2-10
+        
+        if (currentProgress > 95) {
+          currentProgress = 95;
+        }
+        
+        // Update status based on progress
+        if (currentProgress > 20 && progressStage === 'initializing') {
+          setProcessingStatus("Loading OCR engine...");
+          progressStage = 'loading';
+        } else if (currentProgress > 40 && progressStage === 'loading') {
+          setProcessingStatus("Analyzing image...");
+          progressStage = 'analyzing';
+        } else if (currentProgress > 70 && progressStage === 'analyzing') {
+          setProcessingStatus("Extracting text...");
+          progressStage = 'extracting';
+        }
+        
+        setProgress(Math.floor(currentProgress));
+        console.log(`Progress: ${Math.floor(currentProgress)}% - Stage: ${progressStage}`);
+      }, 800);
+      
+      // Ensure completion after reasonable time
+      completionTimeout = setTimeout(() => {
         if (progressInterval) {
           clearInterval(progressInterval);
           progressInterval = null;
         }
-        
-        // Simulate completion progress
-        let currentProgress = 25;
-        const completionInterval = setInterval(() => {
-          currentProgress += 15;
-          setProgress(currentProgress);
-          console.log(`Fallback progress: ${currentProgress}%`);
-          
-          if (currentProgress >= 85) {
-            clearInterval(completionInterval);
-            setProgress(95);
-            setProcessingStatus("Finalizing text extraction...");
-          }
-        }, 1000);
-      }, 5000);
+        setProgress(95);
+        setProcessingStatus("Finalizing...");
+        console.log("Forced progress to 95% after timeout");
+      }, 15000); // 15 seconds max
       
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
-          console.log("OCR Logger info received:", info);
-          hasStarted = true;
-          
-          // Clear initial progress interval once we get real updates
-          if (progressInterval) {
-            clearInterval(progressInterval);
-            progressInterval = null;
-          }
-          
-          // Clear fallback timeout since we're getting real updates
-          if (fallbackTimeout) {
-            clearTimeout(fallbackTimeout);
-            fallbackTimeout = null;
-          }
-          
-          // Update status based on the progress info
-          if (info.status) {
-            let statusText = info.status;
-            switch (info.status) {
-              case 'recognizing text':
-                statusText = 'Analyzing text...';
-                break;
-              case 'loading tesseract core':
-                statusText = 'Loading OCR engine...';
-                break;
-              case 'initializing tesseract':
-                statusText = 'Initializing text recognition...';
-                break;
-              case 'loading language traineddata':
-                statusText = 'Loading language data...';
-                break;
-              case 'initializing api':
-                statusText = 'Setting up OCR...';
-                break;
-              default:
-                statusText = info.status;
-            }
-            
-            setProcessingStatus(statusText);
-            console.log("Status updated to:", statusText);
-          }
-          
-          // Update progress - handle both 0-1 and 0-100 ranges
-          if (typeof info.progress === 'number' && info.progress >= 0) {
-            let progressPercent;
-            if (info.progress <= 1) {
-              progressPercent = Math.round(info.progress * 100);
-            } else {
-              progressPercent = Math.round(info.progress);
-            }
-            
-            // Ensure progress is meaningful and progresses
-            progressPercent = Math.max(progressPercent, 30);
-            progressPercent = Math.min(progressPercent, 100);
-            
-            setProgress(progressPercent);
-            console.log(`Real progress updated to: ${progressPercent}% (original: ${info.progress})`);
-          }
+          console.log("Tesseract logger:", info);
+          // We're handling progress with our own system above
+          // Just log the Tesseract events for debugging
         }
       });
       
-      // Clear any remaining intervals/timeouts
+      // Clear intervals and timeouts
       if (progressInterval) {
         clearInterval(progressInterval);
+        progressInterval = null;
       }
-      if (fallbackTimeout) {
-        clearTimeout(fallbackTimeout);
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
+        completionTimeout = null;
       }
       
       console.log("OCR Result received:", result);
@@ -324,8 +272,8 @@ const ImageToText = () => {
       if (progressInterval) {
         clearInterval(progressInterval);
       }
-      if (fallbackTimeout) {
-        clearTimeout(fallbackTimeout);
+      if (completionTimeout) {
+        clearTimeout(completionTimeout);
       }
       
       console.error("Error processing image:", error);
