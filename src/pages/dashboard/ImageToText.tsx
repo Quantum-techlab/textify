@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -169,9 +168,6 @@ const ImageToText = () => {
     setProcessingStatus("Starting OCR...");
     setErrorMessage(null);
     
-    let progressInterval: NodeJS.Timeout | null = null;
-    let ocrCompleted = false;
-    
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
       console.log("Image file:", image.name, "Size:", image.size);
@@ -185,90 +181,64 @@ const ImageToText = () => {
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
-      setProgress(10);
+      setProgress(15);
       
-      // Enhanced progress simulation that guarantees completion
-      let currentProgress = 10;
+      // Simple progress steps that guarantee completion
+      const progressSteps = [
+        { progress: 15, status: "Initializing text recognition..." },
+        { progress: 35, status: "Loading OCR engine..." },
+        { progress: 55, status: "Analyzing image structure..." },
+        { progress: 75, status: "Extracting text..." },
+        { progress: 90, status: "Finalizing extraction..." }
+      ];
       
-      progressInterval = setInterval(() => {
-        if (ocrCompleted) {
-          // OCR is done, complete the progress
-          setProgress(100);
-          setProcessingStatus("Text extraction complete!");
-          if (progressInterval) {
-            clearInterval(progressInterval);
-            progressInterval = null;
-          }
-          return;
+      let stepIndex = 0;
+      const progressInterval = setInterval(() => {
+        if (stepIndex < progressSteps.length) {
+          const step = progressSteps[stepIndex];
+          setProgress(step.progress);
+          setProcessingStatus(step.status);
+          console.log(`Progress: ${step.progress}% - ${step.status}`);
+          stepIndex++;
         }
-        
-        // Gradual progress increase with realistic stages
-        if (currentProgress < 30) {
-          currentProgress += Math.random() * 4 + 2; // 2-6% increments
-          setProcessingStatus("Loading OCR engine...");
-        } else if (currentProgress < 60) {
-          currentProgress += Math.random() * 3 + 1; // 1-4% increments
-          setProcessingStatus("Analyzing image structure...");
-        } else if (currentProgress < 85) {
-          currentProgress += Math.random() * 2 + 1; // 1-3% increments
-          setProcessingStatus("Extracting text...");
-        } else if (currentProgress < 95) {
-          currentProgress += Math.random() * 1 + 0.5; // 0.5-1.5% increments
-          setProcessingStatus("Finalizing extraction...");
-        } else {
-          // Cap at 95% until OCR completes
-          currentProgress = 95;
-          setProcessingStatus("Processing final text...");
-        }
-        
-        setProgress(Math.floor(currentProgress));
-        console.log(`Progress: ${Math.floor(currentProgress)}%`);
-      }, 500);
+      }, 800);
       
       // Start OCR processing
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
-          console.log("Tesseract progress:", info);
-          // Let our custom progress handle the UI updates
+          console.log("Tesseract logger:", info);
         }
       });
       
       console.log("OCR completed successfully:", result);
       
-      // Mark OCR as completed - this will trigger the progress to reach 100%
-      ocrCompleted = true;
+      // Clear the interval and set completion
+      clearInterval(progressInterval);
+      setProgress(100);
+      setProcessingStatus("Text extraction complete!");
       
-      // Small delay to ensure progress completes visually
-      setTimeout(() => {
-        if (result && result.data && typeof result.data.text === 'string') {
-          const text = result.data.text.trim();
-          if (text) {
-            setExtractedText(text);
-            toast({
-              title: "Text extraction complete",
-              description: "Your text has been successfully extracted from the image.",
-            });
-          } else {
-            setExtractedText("No text was found in the image.");
-            setProcessingStatus("Complete - No text found");
-            toast({
-              title: "No text found",
-              description: "No readable text was detected in the image. Try with a clearer image.",
-            });
-          }
+      if (result && result.data && typeof result.data.text === 'string') {
+        const text = result.data.text.trim();
+        if (text) {
+          setExtractedText(text);
+          toast({
+            title: "Text extraction complete",
+            description: "Your text has been successfully extracted from the image.",
+          });
         } else {
-          throw new Error("Invalid OCR result structure");
+          setExtractedText("No text was found in the image.");
+          setProcessingStatus("Complete - No text found");
+          toast({
+            title: "No text found",
+            description: "No readable text was detected in the image. Try with a clearer image.",
+          });
         }
-      }, 1000); // 1 second delay to show 100% completion
-      
-    } catch (error) {
-      // Clear any remaining intervals
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
+      } else {
+        throw new Error("Invalid OCR result structure");
       }
       
+    } catch (error) {
       console.error("Error processing image:", error);
       const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
       setErrorMessage(`Failed to extract text: ${errorMsg}`);
@@ -281,7 +251,7 @@ const ImageToText = () => {
         description: "There was an error processing your image. Please try again with a different image.",
       });
     } finally {
-      // Clean up and reset processing state after a delay
+      // Reset processing state after a brief delay
       setTimeout(() => {
         setIsProcessing(false);
       }, 1500);
