@@ -1,4 +1,3 @@
-
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -6,9 +5,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Upload, Copy, Download } from "lucide-react";
+import { Upload, Copy, Download, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import Tesseract from 'tesseract.js';
+import { extractTextFromImage, OCRProgress } from "@/utils/ocrProcessor";
 
 const ImageToText = () => {
   const [image, setImage] = useState<File | null>(null);
@@ -35,12 +34,12 @@ const ImageToText = () => {
         return;
       }
 
-      // Validate file size (5MB limit)
-      if (selectedFile.size > 5 * 1024 * 1024) {
+      // Validate file size (10MB limit for better preprocessing)
+      if (selectedFile.size > 10 * 1024 * 1024) {
         toast({
           variant: "destructive",
           title: "File too large",
-          description: "Please select an image smaller than 5MB",
+          description: "Please select an image smaller than 10MB",
         });
         return;
       }
@@ -103,63 +102,43 @@ const ImageToText = () => {
     setIsProcessing(true);
     setProgress(0);
     setExtractedText("");
-    setProcessingStatus("Starting OCR...");
+    setProcessingStatus("Starting enhanced OCR...");
     
     try {
-      console.log(`Starting OCR processing with language: ${language}...`);
+      console.log(`Starting enhanced OCR with language: ${language}...`);
       console.log("Image file:", image.name, "Size:", image.size);
       
-      // Convert image to data URL for better compatibility
-      const imageDataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
-        reader.readAsDataURL(image);
+      const handleProgress = (progressInfo: OCRProgress) => {
+        setProgress(progressInfo.progress);
+        setProcessingStatus(progressInfo.status);
+        console.log(`OCR Progress: ${progressInfo.progress}% - ${progressInfo.status}`);
+      };
+
+      // Use the enhanced OCR processor
+      const text = await extractTextFromImage(image, {
+        language,
+        onProgress: handleProgress
       });
       
-      console.log("Image converted to DataURL, starting Tesseract recognition...");
+      console.log("Enhanced OCR completed successfully");
       
-      // Start OCR processing with proper Tesseract.js
-      const result = await Tesseract.recognize(imageDataUrl, language, {
-        logger: (info) => {
-          console.log("Tesseract logger info:", info);
-          setProcessingStatus(info.status || "Processing...");
-          
-          if (info.progress && typeof info.progress === 'number') {
-            const progressPercent = Math.round(info.progress * 100);
-            setProgress(progressPercent);
-            console.log(`OCR Progress: ${progressPercent}%`);
-          }
-        }
-      });
-      
-      console.log("OCR completed successfully:", result);
-      
-      // Complete the progress bar
-      setProgress(100);
-      setProcessingStatus("Text extraction complete!");
-      
-      if (result && result.data && typeof result.data.text === 'string') {
-        const text = result.data.text.trim();
-        if (text) {
-          setExtractedText(text);
-          toast({
-            title: "Text extraction complete",
-            description: "Your text has been successfully extracted from the image.",
-          });
-        } else {
-          setExtractedText("No text was found in the image.");
-          setProcessingStatus("Complete - No text found");
-          toast({
-            title: "No text found",
-            description: "No readable text was detected in the image. Try with a clearer image.",
-          });
-        }
+      if (text && text.trim()) {
+        setExtractedText(text);
+        toast({
+          title: "Text extraction complete",
+          description: "Your text has been successfully extracted and optimized.",
+        });
       } else {
-        throw new Error("Invalid OCR result structure");
+        setExtractedText("No readable text was found in the image.");
+        setProcessingStatus("Complete - No text found");
+        toast({
+          title: "No text found",
+          description: "No readable text was detected. Try with a clearer image or different settings.",
+        });
       }
       
     } catch (error) {
-      console.error("OCR error:", error);
+      console.error("Enhanced OCR error:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       setExtractedText("");
       setProgress(0);
@@ -208,8 +187,11 @@ const ImageToText = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Image to Text</h1>
-        <p className="text-muted-foreground">Upload an image to extract text using OCR.</p>
+        <h1 className="text-3xl font-bold flex items-center gap-2">
+          <Zap className="text-yellow-500" />
+          Enhanced Image to Text
+        </h1>
+        <p className="text-muted-foreground">Upload an image to extract text using advanced OCR with preprocessing.</p>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -260,6 +242,9 @@ const ImageToText = () => {
                     className="max-h-48 mx-auto object-contain rounded border"
                   />
                   <p className="text-sm text-muted-foreground">{image?.name}</p>
+                  <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                    ✓ Image will be automatically preprocessed for better OCR accuracy
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -268,7 +253,7 @@ const ImageToText = () => {
                   </div>
                   <div>
                     <p className="text-sm font-medium">Drag & drop an image or click to browse</p>
-                    <p className="text-xs text-muted-foreground mt-1">Supports JPG, PNG, WEBP (Max 5MB)</p>
+                    <p className="text-xs text-muted-foreground mt-1">Supports JPG, PNG, WEBP (Max 10MB)</p>
                   </div>
                 </div>
               )}
@@ -280,7 +265,17 @@ const ImageToText = () => {
               onClick={processImage} 
               disabled={!image || isProcessing}
             >
-              {isProcessing ? `Processing... ${Math.round(progress)}%` : "Extract Text"}
+              {isProcessing ? (
+                <span className="flex items-center gap-2">
+                  <Zap size={16} className="animate-pulse" />
+                  Processing... {Math.round(progress)}%
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <Zap size={16} />
+                  Extract Text (Enhanced)
+                </span>
+              )}
             </Button>
           </CardFooter>
         </Card>
@@ -301,14 +296,14 @@ const ImageToText = () => {
                   <p className="text-center text-lg font-semibold text-primary">{Math.round(progress)}% complete</p>
                 </div>
                 <div className="text-center text-sm text-muted-foreground">
-                  Please wait while we extract text from your image...
+                  Enhanced processing with image optimization and advanced OCR...
                 </div>
               </div>
             ) : (
               <Textarea
                 value={extractedText}
                 onChange={(e) => setExtractedText(e.target.value)}
-                placeholder="Extracted text will appear here..."
+                placeholder="Extracted and cleaned text will appear here..."
                 className="min-h-[200px] font-mono"
                 readOnly={!extractedText}
               />
