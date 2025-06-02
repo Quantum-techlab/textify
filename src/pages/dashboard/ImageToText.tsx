@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,21 +8,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Label } from "@/components/ui/label";
 import { Upload, Copy, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Skeleton } from "@/components/ui/skeleton";
-
-interface Tesseract {
-  recognize: (image: File | string, options?: { 
-    logger?: (info: { status: string; progress?: number }) => void,
-    lang?: string 
-  }) => Promise<{ data: { text: string } }>;
-  setLogging?: (level: boolean) => void;
-}
-
-declare global {
-  interface Window {
-    Tesseract?: Tesseract;
-  }
-}
+import Tesseract from 'tesseract.js';
 
 const ImageToText = () => {
   const [image, setImage] = useState<File | null>(null);
@@ -30,47 +17,9 @@ const ImageToText = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [language, setLanguage] = useState("eng");
-  const [tesseractLoaded, setTesseractLoaded] = useState(false);
   const [processingStatus, setProcessingStatus] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-
-  // Check if Tesseract is loaded
-  useEffect(() => {
-    const checkTesseract = () => {
-      if (window.Tesseract) {
-        console.log("Tesseract.js detected and ready!");
-        setTesseractLoaded(true);
-        return true;
-      }
-      return false;
-    };
-
-    // Initial check
-    if (checkTesseract()) return;
-
-    // Set interval to check until loaded
-    const intervalId = setInterval(() => {
-      if (checkTesseract()) {
-        clearInterval(intervalId);
-      }
-    }, 100);
-
-    // Timeout after 30 seconds
-    const timeoutId = setTimeout(() => {
-      clearInterval(intervalId);
-      if (!window.Tesseract) {
-        console.error("Tesseract.js failed to load within 30 seconds");
-        setErrorMessage("Failed to load text extraction library. Please refresh the page.");
-      }
-    }, 30000);
-
-    return () => {
-      clearInterval(intervalId);
-      clearTimeout(timeoutId);
-    };
-  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -106,7 +55,6 @@ const ImageToText = () => {
       setExtractedText("");
       setProgress(0);
       setProcessingStatus("");
-      setErrorMessage(null);
     }
   };
 
@@ -128,7 +76,6 @@ const ImageToText = () => {
         setExtractedText("");
         setProgress(0);
         setProcessingStatus("");
-        setErrorMessage(null);
       } else {
         toast({
           variant: "destructive",
@@ -153,20 +100,10 @@ const ImageToText = () => {
       return;
     }
     
-    if (!window.Tesseract) {
-      toast({
-        variant: "destructive",
-        title: "Tesseract not loaded",
-        description: "Please wait for the text extraction library to load and try again.",
-      });
-      return;
-    }
-    
     setIsProcessing(true);
     setProgress(0);
     setExtractedText("");
     setProcessingStatus("Starting OCR...");
-    setErrorMessage(null);
     
     try {
       console.log(`Starting OCR processing with language: ${language}...`);
@@ -180,45 +117,20 @@ const ImageToText = () => {
       });
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
-      setProcessingStatus("Initializing text recognition...");
-      setProgress(10);
       
-      // Simple progress simulation that guarantees completion
-      let currentProgress = 10;
-      let progressInterval: NodeJS.Timeout;
-      
-      // Start progress simulation
-      progressInterval = setInterval(() => {
-        if (currentProgress < 90) {
-          currentProgress += Math.random() * 10 + 5; // Random increment between 5-15
-          if (currentProgress > 90) currentProgress = 90;
-          setProgress(currentProgress);
-          console.log(`Progress update: ${Math.round(currentProgress)}%`);
-        }
-      }, 800);
-      
-      // Start OCR processing
-      const result = await window.Tesseract.recognize(imageDataUrl, {
-        lang: language,
+      // Start OCR processing with proper Tesseract.js
+      const result = await Tesseract.recognize(imageDataUrl, language, {
         logger: (info) => {
           console.log("Tesseract logger info:", info);
+          setProcessingStatus(info.status || "Processing...");
           
-          if (info.status === 'loading tesseract core') {
-            setProcessingStatus("Loading OCR engine...");
-          } else if (info.status === 'initializing tesseract') {
-            setProcessingStatus("Initializing OCR engine...");
-          } else if (info.status === 'loading language traineddata') {
-            setProcessingStatus("Loading language data...");
-          } else if (info.status === 'initializing api') {
-            setProcessingStatus("Setting up OCR API...");
-          } else if (info.status === 'recognizing text') {
-            setProcessingStatus("Extracting text from image...");
+          if (info.progress && typeof info.progress === 'number') {
+            const progressPercent = Math.round(info.progress * 100);
+            setProgress(progressPercent);
+            console.log(`OCR Progress: ${progressPercent}%`);
           }
         }
       });
-      
-      // Clear progress interval and complete
-      clearInterval(progressInterval);
       
       console.log("OCR completed successfully:", result);
       
@@ -247,16 +159,15 @@ const ImageToText = () => {
       }
       
     } catch (error) {
-      console.error("Error processing image:", error);
-      const errorMsg = error instanceof Error ? error.message : "Unknown error occurred";
-      setErrorMessage(`Failed to extract text: ${errorMsg}`);
+      console.error("OCR error:", error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
       setExtractedText("");
       setProgress(0);
       setProcessingStatus("Error occurred");
       toast({
         variant: "destructive",
         title: "Text extraction failed",
-        description: "There was an error processing your image. Please try again with a different image.",
+        description: errorMsg,
       });
     } finally {
       // Reset processing state after showing completion
@@ -326,26 +237,6 @@ const ImageToText = () => {
               <p className="mt-1 text-xs text-muted-foreground">Select the main language in your image</p>
             </div>
             
-            {/* Tesseract Loading Status */}
-            {!tesseractLoaded && (
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700 flex items-center space-x-2">
-                <Skeleton className="h-4 w-4 rounded-full bg-yellow-300" />
-                <span>Loading text extraction library... Please wait.</span>
-              </div>
-            )}
-            
-            {tesseractLoaded && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-700">
-                ✓ Text extraction library loaded and ready!
-              </div>
-            )}
-            
-            {errorMessage && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
-                {errorMessage}
-              </div>
-            )}
-            
             {/* Drag & Drop Area */}
             <div 
               className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-secondary/50 transition-colors"
@@ -387,7 +278,7 @@ const ImageToText = () => {
             <Button 
               className="w-full" 
               onClick={processImage} 
-              disabled={!image || isProcessing || !tesseractLoaded}
+              disabled={!image || isProcessing}
             >
               {isProcessing ? `Processing... ${Math.round(progress)}%` : "Extract Text"}
             </Button>
