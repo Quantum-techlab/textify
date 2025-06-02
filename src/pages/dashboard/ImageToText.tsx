@@ -181,63 +181,48 @@ const ImageToText = () => {
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
-      setProgress(5);
+      setProgress(10);
       
-      // Set up a fallback progress system
-      let fallbackProgress = 5;
-      let hasRecognitionStarted = false;
-      let isCompleted = false;
+      // Simple progress simulation that guarantees completion
+      let currentProgress = 10;
+      let progressInterval: NodeJS.Timeout;
       
-      // Fallback progress increments if Tesseract progress events don't work
-      const fallbackInterval = setInterval(() => {
-        if (!isCompleted && hasRecognitionStarted && fallbackProgress < 95) {
-          fallbackProgress += 5;
-          setProgress(fallbackProgress);
-          console.log(`Fallback progress: ${fallbackProgress}%`);
+      // Start progress simulation
+      progressInterval = setInterval(() => {
+        if (currentProgress < 90) {
+          currentProgress += Math.random() * 10 + 5; // Random increment between 5-15
+          if (currentProgress > 90) currentProgress = 90;
+          setProgress(currentProgress);
+          console.log(`Progress update: ${Math.round(currentProgress)}%`);
         }
-      }, 1000);
+      }, 800);
       
-      // Start OCR processing with comprehensive progress tracking
+      // Start OCR processing
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
           console.log("Tesseract logger info:", info);
           
           if (info.status === 'loading tesseract core') {
-            setProgress(10);
             setProcessingStatus("Loading OCR engine...");
           } else if (info.status === 'initializing tesseract') {
-            setProgress(15);
             setProcessingStatus("Initializing OCR engine...");
           } else if (info.status === 'loading language traineddata') {
-            setProgress(25);
             setProcessingStatus("Loading language data...");
           } else if (info.status === 'initializing api') {
-            setProgress(35);
             setProcessingStatus("Setting up OCR API...");
           } else if (info.status === 'recognizing text') {
-            hasRecognitionStarted = true;
-            if (info.progress && typeof info.progress === 'number') {
-              // Map Tesseract's 0-1 progress to our 40-95% range
-              const mappedProgress = 40 + (info.progress * 55);
-              setProgress(Math.min(95, Math.max(40, mappedProgress)));
-              setProcessingStatus(`Extracting text... ${Math.round(info.progress * 100)}%`);
-              console.log(`Text recognition progress: ${Math.round(info.progress * 100)}%`);
-            } else {
-              setProgress(Math.min(90, Math.max(fallbackProgress, 40)));
-              setProcessingStatus("Extracting text from image...");
-            }
+            setProcessingStatus("Extracting text from image...");
           }
         }
       });
       
-      // Clear the fallback interval
-      clearInterval(fallbackInterval);
-      isCompleted = true;
+      // Clear progress interval and complete
+      clearInterval(progressInterval);
       
       console.log("OCR completed successfully:", result);
       
-      // Ensure we reach 100% completion
+      // Complete the progress bar
       setProgress(100);
       setProcessingStatus("Text extraction complete!");
       
