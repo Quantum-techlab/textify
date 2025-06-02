@@ -181,34 +181,59 @@ const ImageToText = () => {
       
       console.log("Image converted to DataURL, starting Tesseract recognition...");
       setProcessingStatus("Initializing text recognition...");
-      setProgress(10);
+      setProgress(5);
       
-      // Start OCR processing with real-time progress tracking
+      // Set up a fallback progress system
+      let fallbackProgress = 5;
+      let hasRecognitionStarted = false;
+      let isCompleted = false;
+      
+      // Fallback progress increments if Tesseract progress events don't work
+      const fallbackInterval = setInterval(() => {
+        if (!isCompleted && hasRecognitionStarted && fallbackProgress < 95) {
+          fallbackProgress += 5;
+          setProgress(fallbackProgress);
+          console.log(`Fallback progress: ${fallbackProgress}%`);
+        }
+      }, 1000);
+      
+      // Start OCR processing with comprehensive progress tracking
       const result = await window.Tesseract.recognize(imageDataUrl, {
         lang: language,
         logger: (info) => {
-          console.log("Tesseract progress:", info);
+          console.log("Tesseract logger info:", info);
           
-          if (info.status === 'recognizing text' && info.progress) {
-            // Map Tesseract's 0-1 progress to our 20-95% range
-            const mappedProgress = 20 + (info.progress * 75);
-            setProgress(Math.min(95, mappedProgress));
-            setProcessingStatus("Extracting text from image...");
-          } else if (info.status === 'loading tesseract core') {
-            setProgress(15);
+          if (info.status === 'loading tesseract core') {
+            setProgress(10);
             setProcessingStatus("Loading OCR engine...");
           } else if (info.status === 'initializing tesseract') {
-            setProgress(20);
-            setProcessingStatus("Initializing text recognition...");
+            setProgress(15);
+            setProcessingStatus("Initializing OCR engine...");
           } else if (info.status === 'loading language traineddata') {
             setProgress(25);
             setProcessingStatus("Loading language data...");
           } else if (info.status === 'initializing api') {
-            setProgress(30);
+            setProgress(35);
             setProcessingStatus("Setting up OCR API...");
+          } else if (info.status === 'recognizing text') {
+            hasRecognitionStarted = true;
+            if (info.progress && typeof info.progress === 'number') {
+              // Map Tesseract's 0-1 progress to our 40-95% range
+              const mappedProgress = 40 + (info.progress * 55);
+              setProgress(Math.min(95, Math.max(40, mappedProgress)));
+              setProcessingStatus(`Extracting text... ${Math.round(info.progress * 100)}%`);
+              console.log(`Text recognition progress: ${Math.round(info.progress * 100)}%`);
+            } else {
+              setProgress(Math.min(90, Math.max(fallbackProgress, 40)));
+              setProcessingStatus("Extracting text from image...");
+            }
           }
         }
       });
+      
+      // Clear the fallback interval
+      clearInterval(fallbackInterval);
+      isCompleted = true;
       
       console.log("OCR completed successfully:", result);
       
@@ -249,10 +274,10 @@ const ImageToText = () => {
         description: "There was an error processing your image. Please try again with a different image.",
       });
     } finally {
-      // Reset processing state after a brief delay to show completion
+      // Reset processing state after showing completion
       setTimeout(() => {
         setIsProcessing(false);
-      }, 2000);
+      }, 1500);
     }
   };
 
@@ -379,7 +404,7 @@ const ImageToText = () => {
               onClick={processImage} 
               disabled={!image || isProcessing || !tesseractLoaded}
             >
-              {isProcessing ? `Processing... ${progress}%` : "Extract Text"}
+              {isProcessing ? `Processing... ${Math.round(progress)}%` : "Extract Text"}
             </Button>
           </CardFooter>
         </Card>
@@ -397,7 +422,7 @@ const ImageToText = () => {
                 </p>
                 <div className="space-y-2">
                   <Progress value={progress} className="h-3" />
-                  <p className="text-center text-lg font-semibold text-primary">{progress}% complete</p>
+                  <p className="text-center text-lg font-semibold text-primary">{Math.round(progress)}% complete</p>
                 </div>
                 <div className="text-center text-sm text-muted-foreground">
                   Please wait while we extract text from your image...
