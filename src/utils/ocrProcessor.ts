@@ -101,7 +101,7 @@ export const extractTextFromImage = async (
     }
 
     // Create and configure Tesseract worker
-    const worker = await createWorker({
+    const worker = await createWorker(language, 1, {
       logger: (m) => {
         console.log('Tesseract logger:', m);
         
@@ -142,10 +142,6 @@ export const extractTextFromImage = async (
       },
     });
 
-    // Load and initialize the specified language
-    await worker.loadLanguage(language);
-    await worker.initialize(language);
-    
     // Set OCR parameters for better accuracy
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
